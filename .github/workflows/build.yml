@@ -63,26 +63,16 @@ jobs:
           javac -cp build/Pacman.jar -d build/test-classes test/SmokeTest.java
           java -Djava.awt.headless=true -cp "build/Pacman.jar${SEP}build/test-classes" SmokeTest
 
-      - name: Package (Linux)
+      - name: Package portable (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq fakeroot rpm
           mkdir -p build/jpackage-input
           cp build/Pacman.jar build/jpackage-input/
           jpackage --type app-image --name Pacman --app-version "$VERSION" \
             --input build/jpackage-input --main-jar Pacman.jar --main-class App \
             --icon assets/icon.png --dest dist
           tar -C dist -czf "dist/${{ matrix.artifact }}.tar.gz" Pacman
-          jpackage --type deb --name pacman --app-version "$VERSION" \
-            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
-            --icon assets/icon.png --linux-shortcut --dest dist
-          jpackage --type rpm --name pacman --app-version "$VERSION" \
-            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
-            --icon assets/icon.png --linux-shortcut --dest dist
-          mv dist/*.deb "dist/${{ matrix.artifact }}.deb"
-          mv dist/*.rpm "dist/${{ matrix.artifact }}.rpm"
           # Make sure the packaged launcher starts and finds its resources.
           output=$(./dist/Pacman/bin/Pacman -J-Djava.awt.headless=true 2>&1 || true)
           echo "$output"
@@ -104,26 +94,7 @@ jobs:
             --icon assets\icon.ico --dest dist
           Compress-Archive -Path dist\Pacman -DestinationPath "dist\${{ matrix.artifact }}.zip"
 
-      - name: Package MSI (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # jpackage needs candle.exe/light.exe on PATH to build an MSI.
-          $wix = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*\bin" -Directory -ErrorAction SilentlyContinue |
-            Select-Object -First 1 -ExpandProperty FullName
-          if ($wix) {
-            $env:PATH = "$env:PATH;$wix"
-            Write-Host "WiX bin: $wix"
-          } else {
-            Write-Host "WiX not found in the default location"
-          }
-          Get-Command candle.exe -ErrorAction SilentlyContinue | Out-Null
-          jpackage --type msi --name Pacman --app-version $env:VERSION `
-            --input build\jpackage-input --main-jar Pacman.jar --main-class App `
-            --icon assets\icon.ico --win-shortcut --win-menu --dest dist
-          Rename-Item dist\*.msi "${{ matrix.artifact }}.msi"
-
-      - name: Package (macOS)
+      - name: Package portable (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
@@ -133,10 +104,6 @@ jobs:
             --input build/jpackage-input --main-jar Pacman.jar --main-class App \
             --icon assets/icon.icns --dest dist
           ditto -c -k --sequesterRsrc --keepParent dist/Pacman.app "dist/${{ matrix.artifact }}.zip"
-          jpackage --type dmg --name Pacman --app-version "$VERSION" \
-            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
-            --icon assets/icon.icns --dest dist
-          mv dist/*.dmg "dist/${{ matrix.artifact }}.dmg"
 
       - name: Upload installers
         uses: actions/upload-artifact@v7
@@ -144,10 +111,6 @@ jobs:
           name: ${{ matrix.artifact }}
           path: |
             dist/*.zip
-            dist/*.dmg
-            dist/*.deb
-            dist/*.rpm
-            dist/*.msi
             dist/*.tar.gz
           if-no-files-found: error
 

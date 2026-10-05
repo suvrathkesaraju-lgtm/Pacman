@@ -14,14 +14,12 @@ Every release ships self-contained builds (no Java installation needed) plus a
 portable JAR for any platform. See the
 [latest release](https://github.com/suvrathkesaraju-lgtm/Pacman/releases/latest).
 
-| Platform | File | Notes |
+| Platform | File | How to run |
 | --- | --- | --- |
-| Windows 10/11 x64 | `Pacman-Windows-x64.msi` | Installer with Start Menu shortcut |
-| Windows 10/11 x64 | `Pacman-Windows-x64.zip` | Portable, run `Pacman.exe` |
-| macOS (Apple silicon) | `Pacman-macOS-arm64.dmg` / `.zip` | |
-| macOS (Intel) | `Pacman-macOS-x64.dmg` / `.zip` | |
-| Linux x64 | `Pacman-Linux-x64.deb` / `.rpm` | Installs to `/opt/pacman` |
-| Linux x64 | `Pacman-Linux-x64.tar.gz` | Portable, run `./Pacman/bin/Pacman` |
+| Windows 10/11 x64 | `Pacman-Windows-x64.zip` | Unzip, run `Pacman\Pacman.exe` |
+| macOS (Apple silicon) | `Pacman-macOS-arm64.zip` | Unzip, open `Pacman.app` |
+| macOS (Intel) | `Pacman-macOS-x64.zip` | Unzip, open `Pacman.app` |
+| Linux x64 | `Pacman-Linux-x64.tar.gz` | Extract, run `./Pacman/bin/Pacman` |
 | Any OS with Java 17+ | `Pacman.jar` | `java -jar Pacman.jar` |
 
 > The macOS builds are not code-signed. On first launch, right-click the app and
@@ -73,28 +71,30 @@ javac -cp build/Pacman.jar -d build/test-classes test/SmokeTest.java
 java -Djava.awt.headless=true -cp build/Pacman.jar:build/test-classes SmokeTest
 ```
 
-### Native installers with jpackage
+### Portable builds with jpackage
 
-Release builds are produced with `jpackage`. To build an installer for the OS
-you are on, first create `build/jpackage-input` containing a copy of
-`build/Pacman.jar`, then run:
+Release builds are produced with `jpackage` as self-contained app images with a
+bundled Java runtime. Create `build/jpackage-input` containing a copy of
+`build/Pacman.jar`, then run the command for your OS:
 
 ```bash
-# Linux .deb (also supports .rpm and app-image)
-jpackage --type deb --name pacman --app-version 1.0.0 \
+# Linux
+jpackage --type app-image --name Pacman --app-version 1.0.0 \
   --input build/jpackage-input --main-jar Pacman.jar --main-class App \
-  --icon assets/icon.png --linux-shortcut --dest dist
+  --icon assets/icon.png --dest dist
 
-# macOS .dmg
-jpackage --type dmg --name Pacman --app-version 1.0.0 \
+# macOS
+jpackage --type app-image --name Pacman --app-version 1.0.0 \
   --input build/jpackage-input --main-jar Pacman.jar --main-class App \
   --icon assets/icon.icns --dest dist
 
-# Windows .msi (requires WiX Toolset 3.x on the PATH)
-jpackage --type msi --name Pacman --app-version 1.0.0 ^
-  --input build\jpackage-input --main-jar Pacman.jar --main-class App ^
-  --icon assets\icon.ico --win-shortcut --win-menu --dest dist
+# Windows (PowerShell)
+jpackage --type app-image --name Pacman --app-version 1.0.0 `
+  --input build\jpackage-input --main-jar Pacman.jar --main-class App `
+  --icon assets\icon.ico --dest dist
 ```
+
+Then archive the `dist/Pacman` folder (on macOS, `dist/Pacman.app`).
 
 Regenerate the launcher icons from the sprite with
 `python3 scripts/make-icons.py` (requires ImageMagick).
@@ -114,5 +114,5 @@ build.sh        Compiles src/ into build/Pacman.jar
 
 [`.github/workflows/build.yml`](.github/workflows/build.yml) builds the game on
 every push and pull request for Windows, macOS (arm64 and x64) and Linux.
-Pushing a tag such as `v1.0.0` builds the platform installers, portable archives
-and the universal JAR, then publishes them as a GitHub release.
+Pushing a tag such as `v1.0.0` builds the portable archives and the universal
+JAR, then publishes them as a GitHub release.
