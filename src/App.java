@@ -1,23 +1,29 @@
+import java.awt.Image;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
+
 public class App {
     public static void main(String[] args) {
-        //Set Window Size
-        int rowCount =21;
-        int columnCount = 19;
-        int tileSize = 32;
-        int boardWidth = columnCount *tileSize;
-        int boardHeight = rowCount * tileSize;
-        //Create window
-        JFrame frame = new JFrame("Pacman");
-        frame.setVisible(true);
-        frame.setSize(boardWidth, boardHeight);
-        frame.setLocationRelativeTo(null);
-        frame.setResizable(false);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("Pacman");
+            Pacman game = new Pacman();
+            frame.add(game);
+            frame.pack();
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setLocationRelativeTo(null);
+            frame.setResizable(false);
+            setWindowIcon(frame);
+            frame.setVisible(true);
+            game.requestFocusInWindow();
+        });
+    }
 
-        Pacman pacmangame = new Pacman();
-        frame.add(pacmangame);
-        frame.pack();
-
+    private static void setWindowIcon(JFrame frame) {
+        java.net.URL url = App.class.getResource("/pacmanRight.png");
+        if (url != null) {
+            Image icon = new ImageIcon(url).getImage();
+            frame.setIconImage(icon);
+        }
     }
 }

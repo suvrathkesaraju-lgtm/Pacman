@@ -1,0 +1,171 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux-x64
+            artifact: Pacman-Linux-x64
+          - os: windows-latest
+            name: Windows-x64
+            artifact: Pacman-Windows-x64
+          - os: macos-latest
+            name: macOS-arm64
+            artifact: Pacman-macOS-arm64
+          - os: macos-15-intel
+            name: macOS-x64
+            artifact: Pacman-macOS-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="1.0.0"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Building version ${VERSION}"
+
+      - name: Build runnable JAR
+        shell: bash
+        run: ./build.sh
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          SEP=":"
+          [[ "$RUNNER_OS" == "Windows" ]] && SEP=";"
+          javac -cp build/Pacman.jar -d build/test-classes test/SmokeTest.java
+          java -Djava.awt.headless=true -cp "build/Pacman.jar${SEP}build/test-classes" SmokeTest
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fakeroot rpm
+          mkdir -p build/jpackage-input
+          cp build/Pacman.jar build/jpackage-input/
+          jpackage --type app-image --name Pacman --app-version "$VERSION" \
+            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
+            --icon assets/icon.png --dest dist
+          tar -C dist -czf "dist/${{ matrix.artifact }}.tar.gz" Pacman
+          jpackage --type deb --name pacman --app-version "$VERSION" \
+            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
+            --icon assets/icon.png --linux-shortcut --dest dist
+          jpackage --type rpm --name pacman --app-version "$VERSION" \
+            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
+            --icon assets/icon.png --linux-shortcut --dest dist
+          mv dist/*.deb "dist/${{ matrix.artifact }}.deb"
+          mv dist/*.rpm "dist/${{ matrix.artifact }}.rpm"
+          # Make sure the packaged launcher starts and finds its resources.
+          output=$(./dist/Pacman/bin/Pacman -J-Djava.awt.headless=true 2>&1 || true)
+          echo "$output"
+          if echo "$output" | grep -q "HeadlessException"; then
+            echo "Packaged launcher OK"
+          else
+            echo "Packaged launcher failed"
+            exit 1
+          fi
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build\jpackage-input | Out-Null
+          Copy-Item build\Pacman.jar build\jpackage-input\
+          jpackage --type app-image --name Pacman --app-version $env:VERSION `
+            --input build\jpackage-input --main-jar Pacman.jar --main-class App `
+            --icon assets\icon.ico --dest dist
+          Compress-Archive -Path dist\Pacman -DestinationPath "dist\${{ matrix.artifact }}.zip"
+          jpackage --type msi --name Pacman --app-version $env:VERSION `
+            --input build\jpackage-input --main-jar Pacman.jar --main-class App `
+            --icon assets\icon.ico --win-shortcut --win-menu --dest dist
+          Rename-Item dist\*.msi "dist\${{ matrix.artifact }}.msi"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p build/jpackage-input
+          cp build/Pacman.jar build/jpackage-input/
+          jpackage --type app-image --name Pacman --app-version "$VERSION" \
+            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
+            --icon assets/icon.icns --dest dist
+          ditto -c -k --sequesterRsrc --keepParent dist/Pacman.app "dist/${{ matrix.artifact }}.zip"
+          jpackage --type dmg --name Pacman --app-version "$VERSION" \
+            --input build/jpackage-input --main-jar Pacman.jar --main-class App \
+            --icon assets/icon.icns --dest dist
+          mv dist/*.dmg "dist/${{ matrix.artifact }}.dmg"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.zip
+            dist/*.dmg
+            dist/*.deb
+            dist/*.rpm
+            dist/*.msi
+            dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Upload universal JAR
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Pacman-universal
+          path: build/Pacman.jar
+
+  release:
+    name: Publish GitHub release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -la release-assets
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* \
+              --title "Pacman $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
