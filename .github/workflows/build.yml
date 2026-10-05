@@ -121,7 +121,7 @@ jobs:
           jpackage --type msi --name Pacman --app-version $env:VERSION `
             --input build\jpackage-input --main-jar Pacman.jar --main-class App `
             --icon assets\icon.ico --win-shortcut --win-menu --dest dist
-          Rename-Item dist\*.msi "dist\${{ matrix.artifact }}.msi"
+          Rename-Item dist\*.msi "${{ matrix.artifact }}.msi"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
