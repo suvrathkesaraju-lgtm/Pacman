@@ -93,7 +93,7 @@ jobs:
             exit 1
           fi
 
-      - name: Package (Windows)
+      - name: Package portable (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -103,6 +103,21 @@ jobs:
             --input build\jpackage-input --main-jar Pacman.jar --main-class App `
             --icon assets\icon.ico --dest dist
           Compress-Archive -Path dist\Pacman -DestinationPath "dist\${{ matrix.artifact }}.zip"
+
+      - name: Package MSI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # jpackage needs candle.exe/light.exe on PATH to build an MSI.
+          $wix = Get-ChildItem "C:\Program Files (x86)\WiX Toolset*\bin" -Directory -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if ($wix) {
+            $env:PATH = "$env:PATH;$wix"
+            Write-Host "WiX bin: $wix"
+          } else {
+            Write-Host "WiX not found in the default location"
+          }
+          Get-Command candle.exe -ErrorAction SilentlyContinue | Out-Null
           jpackage --type msi --name Pacman --app-version $env:VERSION `
             --input build\jpackage-input --main-jar Pacman.jar --main-class App `
             --icon assets\icon.ico --win-shortcut --win-menu --dest dist
